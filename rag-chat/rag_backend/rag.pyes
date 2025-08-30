@@ -1,0 +1,50 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+import time, logging
+
+from langchain.chains import RetrievalQA
+from langchain_google_vertexai import ChatVertexAI
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+logging.basicConfig(level=logging.INFO)
+app = FastAPI()
+
+class Query(BaseModel):
+    query: str
+
+# Embeddings
+embeddings = OpenAIEmbeddings()
+
+# Load your PDFs
+pdf_files = [
+    "data/test-bank.pdf",
+    "data/test-bank-ans.pdf"
+]
+
+docs = []
+for pdf in pdf_files:
+    loader = PyPDFLoader(pdf)
+    docs.extend(loader.load())
+
+# Split into chunks
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+chunks = splitter.split_documents(docs)
+
+# Store in Chroma
+vectordb = Chroma.from_documents(chunks, embeddings, collection_name="docs", persist_directory="./chroma_store")
+
+retriever = vectordb.as_retriever()
+llm = ChatVertexAI(model="gemini-pro")
+rag_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
+
+@app.post("/rag")
+def rag(query: Query):
+    start = time.time()
+    answer = rag_chain.run(query.query)
+    latency = time.time() - start
+    logging.info(f"metric=rag_latency value={latency}")
+    return {"answer": answer, "latency": latency}
+

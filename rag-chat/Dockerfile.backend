@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && pip install pypdf
+
+# Copy backend code (rag.py + data folder)
+COPY rag_backend/ ./rag_backend/
+
+# Run backend service
+CMD ["uvicorn", "rag_backend.rag:app", "--host", "0.0.0.0", "--port", "8081"]
+
